@@ -39,12 +39,12 @@ WiseMLParser.prototype.parse = function() {
 WiseMLParser.prototype.parseNode = function(node) {
 	var id = this.convertIdToIp(node.id);
 
-	var rotCo = coordinates.rotate(new Coordinate(node.position.x,
-			node.position.y, node.position.z, this.origin.phi,
-			this.origin.theta), this.origin.phi);
+     var wiseMLPos = new Coordinate(node.position.x,
+                    node.position.y, node.position.z,
+                    this.origin.phi, this.origin.theta);
 
-	var absCo = coordinates.absolute(this.origin, rotCo);
-	var finalCo = coordinates.xyz2blh(absCo);
+    var pos = coordinates.blh2xyz(wiseMLPos);
+	var finalCo = coordinates.xyz2blh(pos);
 	var n = new Node(id, node.description, finalCo);
 
 	this.nodes.push(n);
