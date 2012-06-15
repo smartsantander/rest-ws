@@ -2,6 +2,7 @@ package eu.wisebed.restws.proxy;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import eu.wisebed.api.WisebedServiceHelper;
 import eu.wisebed.api.common.KeyValuePair;
 import eu.wisebed.api.rs.RS;
 import eu.wisebed.api.sm.SessionManagement;
@@ -9,10 +10,8 @@ import eu.wisebed.api.snaa.SNAA;
 import eu.wisebed.restws.WisebedRestServerConfig;
 import eu.wisebed.restws.dto.TestbedMap;
 import eu.wisebed.restws.exceptions.UnknownTestbedIdException;
-import eu.wisebed.restws.util.RSServiceHelper;
-import eu.wisebed.restws.util.SNAAServiceHelper;
-import eu.wisebed.restws.util.WSNServiceHelper;
 
+import javax.annotation.Nonnull;
 import javax.xml.ws.Holder;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +33,8 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 
 
 	@Override
-	public synchronized SNAA getSnaaEndpoint(final String testbedId) throws UnknownTestbedIdException {
+	@Nonnull
+	public synchronized SNAA getSnaaEndpoint(@Nonnull final String testbedId) throws UnknownTestbedIdException {
 
 		checkNotNull(testbedId);
 
@@ -49,10 +49,11 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 	}
 
 	@Override
-	public synchronized RS getRsEndpoint(final String testbedId) throws UnknownTestbedIdException {
+	@Nonnull
+	public synchronized RS getRsEndpoint(@Nonnull final String testbedId) throws UnknownTestbedIdException {
 
 		checkNotNull(testbedId);
-		
+
 		RS rs = rsMap.get(testbedId);
 		if (rs != null) {
 			return rs;
@@ -64,7 +65,9 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 	}
 
 	@Override
-	public synchronized SessionManagement getSmEndpoint(final String testbedId) throws UnknownTestbedIdException {
+	@Nonnull
+	public synchronized SessionManagement getSmEndpoint(@Nonnull final String testbedId)
+			throws UnknownTestbedIdException {
 
 		checkNotNull(testbedId);
 
@@ -79,7 +82,7 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 	}
 
 	private void fillMaps(final String testbedId) throws UnknownTestbedIdException {
-		
+
 		final TestbedMap.Testbed testbed = config.testbedMap.testbedMap.get(testbedId);
 		final SessionManagement sm;
 
@@ -87,7 +90,7 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 			throw new UnknownTestbedIdException(testbedId);
 		}
 
-		sm = WSNServiceHelper.getSessionManagementService(testbed.sessionManagementEndpointUrl);
+		sm = WisebedServiceHelper.getSessionManagementService(testbed.sessionManagementEndpointUrl);
 
 		final Holder<String> rsEndpointUrlHolder = new Holder<String>();
 		final Holder<String> snaaEndpointUrlHolder = new Holder<String>();
@@ -96,7 +99,7 @@ public class WebServiceEndpointManagerImpl implements WebServiceEndpointManager 
 		sm.getConfiguration(rsEndpointUrlHolder, snaaEndpointUrlHolder, optionsHolder);
 
 		smMap.put(testbedId, sm);
-		rsMap.put(testbedId, RSServiceHelper.getRSService(rsEndpointUrlHolder.value));
-		snaaMap.put(testbedId, SNAAServiceHelper.getSNAAService(snaaEndpointUrlHolder.value));
+		rsMap.put(testbedId, WisebedServiceHelper.getRSService(rsEndpointUrlHolder.value));
+		snaaMap.put(testbedId, WisebedServiceHelper.getSNAAService(snaaEndpointUrlHolder.value));
 	}
 }

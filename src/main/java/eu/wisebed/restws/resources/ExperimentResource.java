@@ -5,6 +5,7 @@ import static com.google.common.base.Throwables.propagate;
 import java.io.StringReader;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -27,6 +28,8 @@ import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.datatype.DatatypeFactory;
 
+import com.google.common.util.concurrent.TimeLimiter;
+import com.google.common.util.concurrent.UncheckedTimeoutException;
 import org.joda.time.DateTime;
 import org.joda.time.format.ISODateTimeFormat;
 import org.slf4j.Logger;
@@ -94,6 +97,9 @@ public class ExperimentResource {
 	@Inject
 	private WisebedRestServerConfig config;
 
+	@Inject
+	private TimeLimiter timeLimiter;
+
 	@GET
 	@Path("network")
 	@Produces({ MediaType.APPLICATION_JSON })
@@ -101,12 +107,25 @@ public class ExperimentResource {
 
 		try {
 
-			Wiseml wiseml = getWiseml(testbedId);
+			Wiseml wiseml = timeLimiter.callWithTimeout(new Callable<Wiseml>() {
+				@Override
+				public Wiseml call() throws Exception {
+					return getWiseml(testbedId);
+				}
+			}, 5, TimeUnit.SECONDS, true);
+
 			String jsonString = JSONHelper.toJSON(wiseml);
 			log.trace("Returning JSON representation of WiseML: {}", jsonString);
 			return Response.ok(jsonString).build();
 
-		} catch (JAXBException e) {
+		} catch (Exception e) {
+			if (e instanceof UncheckedTimeoutException) {
+				return returnError(
+						"Timeout while retrieving WiseML from testbed backend",
+						e,
+						Status.SERVICE_UNAVAILABLE
+				);
+			}
 			return returnError("Unable to retrieve WiseML", e, Status.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -118,14 +137,22 @@ public class ExperimentResource {
 			@QueryParam("capability") final String capability) {
 
 		try {
-			Wiseml wiseml = getWiseml(testbedId);
+
+			Wiseml wiseml = timeLimiter.callWithTimeout(new Callable<Wiseml>() {
+				@Override
+				public Wiseml call() throws Exception {
+					return getWiseml(testbedId);
+				}
+			}, 5, TimeUnit.SECONDS, true
+			);
 
 			NodeUrnList nodeList = new NodeUrnList();
 			nodeList.nodeUrns = new LinkedList<String>();
 
 			// First add all
-			for (Node node : wiseml.getSetup().getNode())
+			for (Node node : wiseml.getSetup().getNode()) {
 				nodeList.nodeUrns.add(node.getId());
+			}
 
 			// Then remove non-matching ones
 			for (Node node : wiseml.getSetup().getNode()) {
@@ -148,7 +175,14 @@ public class ExperimentResource {
 			log.trace("Returning JSON representation of node list for filter {}: {}", filter, jsonString);
 			return Response.ok(jsonString).build();
 
-		} catch (JAXBException e) {
+		} catch (Exception e) {
+			if (e instanceof UncheckedTimeoutException) {
+				return returnError(
+						"Timeout while retrieving WiseML from testbed backend",
+						e,
+						Status.SERVICE_UNAVAILABLE
+				);
+			}
 			return returnError("Unable to retrieve WiseML", e, Status.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -164,16 +198,16 @@ public class ExperimentResource {
 	private String toString(Capability c) {
 		StringBuilder sb = new StringBuilder();
 		if (c.getName() != null)
-			sb.append(c.getName() + " ");
+			sb.append(c.getName()).append(" ");
 
 		if (c.getDatatype() != null && c.getDatatype().value() != null)
-			sb.append(c.getDatatype().value() + " ");
+			sb.append(c.getDatatype().value()).append(" ");
 
 		if (c.getDefault() != null)
-			sb.append(c.getDefault() + " ");
+			sb.append(c.getDefault()).append(" ");
 
 		if (c.getUnit() != null && c.getUnit().value() != null)
-			sb.append(c.getUnit().value() + " ");
+			sb.append(c.getUnit().value()).append(" ");
 
 		return sb.toString();
 	}
@@ -385,7 +419,7 @@ public class ExperimentResource {
 		// data:[<mediatype>][;base64]
 		int commaPos = dataURL.indexOf(',');
 		String header = dataURL.substring(0, commaPos);
-		if (!header.endsWith(";base64")) {
+		if (!header.endsWith("base64")) {
 			throw new RuntimeException("Data URLs are only supported with base64 encoding!");
 		}
 		return Base64.decode(dataURL.substring(commaPos + 1).getBytes());
@@ -467,7 +501,7 @@ public class ExperimentResource {
 				return createExperimentNotFoundResponse(experimentUrlBase64);
 			}
 
-			Job job = null;
+			Job job;
 			try {
 
 				job = wsnProxy.resetNodes(nodeUrns.nodeUrns, config.operationTimeoutMillis, TimeUnit.MILLISECONDS).get();
